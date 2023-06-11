@@ -358,30 +358,34 @@ perl script/abstract.pl dNTP/dNTP.tiger.tbl > dNTP/dNTP_tiger.abstract.tsv
 
 #查看dNTP同家族蛋白的数据库登录号以及结构域描述
 cat  dNTP/dNTP_tiger.abstract.tsv | tsv-summarize -g 2,6  --count
-# PF13286.6       Phosphohydrolase-associated_domain      1756
-# PF01966.22      HD_domain       1564
-# PF10237.9       Probable_N6-adenine_methyltransferase   1
+# NF002205.0      NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      3222
+# TIGR01353.1     JCVI:_dNTP_triphosphohydrolase  4726
+# NF003429.0      NCBI_Protein_Cluster_(PRK):_dGTPase     3218
+# NF003701.0      NCBI_Protein_Cluster_(PRK):_dGTPase     4704
+# NF002829.0      NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      3826
+# NF002326.0      NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      1567
+# NF002328.0      NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      1567
+# NF002327.0      NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      1567
+# NF002330.0      NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      1567
+# NF002329.0      NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      1508
 
 #查看domain以及domain的描述
 cat  dNTP/dNTP_tiger.abstract.tsv | tsv-summarize -g 1,6 --count
-# HD_assoc        Phosphohydrolase-associated_domain      1756
-# HD      HD_domain       1564
-# N6-adenineMlase Probable_N6-adenine_methyltransferase   1
+
 
 #同一蛋白序列可以匹配到多条model序列,只保留e值最小的且description符合该famliy的菌株蛋白序列名
 perl script/compare.pl dNTP/dNTP_tiger.abstract.tsv >dNTP/dNTP_tiger_minevalue.tsv
 tsv-summarize -g 3 --count dNTP/dNTP_tiger_minevalue.tsv
-# Phosphohydrolase-associated_domain      1756
-# HD_domain   
-
+# NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      3763
+# NCBI_Protein_Cluster_(PRK):_dGTPase     920
+# JCVI:_dNTP_triphosphohydrolase  43
 
 #拼接属名等信息并统计拷贝数
-cat dNTP_tiger_minevalue.tsv | tsv-select -f 1,3 |
+cat dNTP/dNTP_tiger_minevalue.tsv | tsv-select -f 1,3 |
 tsv-summarize -g 2 --count 
-# Phosphohydrolase-associated_domain      1756
-# HD_domain       18
 
-cat dNTP_tiger_minevalue.tsv | tsv-select -f 1,3  >dNTP/dNTP.hmmscan_tiger_filter.replace.tsv
+
+cat dNTP/dNTP_tiger_minevalue.tsv | tsv-select -f 1,3  >dNTP/dNTP.hmmscan_tiger_filter.replace.tsv
 cat dNTP/dNTP.hmmscan_tiger_filter.replace.tsv | tsv-select -f 1 | grep -Eo '([^_]+_[^_]+)$' | sed 's/$/.1/' > dNTP/dNTP.hmmscan_tiger_filter_WP.replace.tsv
 paste dNTP/dNTP.hmmscan_tiger_filter_WP.replace.tsv dNTP/dNTP.hmmscan_tiger_filter.replace.tsv > dNTP/dNTP.hmmscan_tiger_filter.summary
 # 形成统计表格
