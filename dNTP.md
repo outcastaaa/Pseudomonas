@@ -1,4 +1,9 @@
 # dNTP triphosphohydrolase
+1. 使用hmmsearch最大范围内统计不同菌株中蛋白的copy数  
+2. 使用hmmscan保留最显著的domain为给定famliy的蛋白，并统计不同菌株中蛋白的copy数据,e值为1e-50  
+3. 使用blastp将种子序列在所有蛋白里面检索直至没有新的结果出现  
+
+
 + 检索：使用hmmsearch抓取相同domain的基因或者基因家族  
 
 ```bash
@@ -377,7 +382,7 @@ cat  dNTP/dNTP_tiger.abstract.tsv | tsv-summarize -g 1,6 --count
 perl script/compare.pl dNTP/dNTP_tiger.abstract.tsv >dNTP/dNTP_tiger_minevalue.tsv
 tsv-summarize -g 3 --count dNTP/dNTP_tiger_minevalue.tsv
 # NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      3763
-# NCBI_Protein_Cluster_(PRK):_dGTPase     920
+# NCBI_Protein_Cluster_(PRK):_dGTPase     920 这两个看情况去掉
 # JCVI:_dNTP_triphosphohydrolase  43
 
 #拼接属名等信息并统计拷贝数
@@ -391,12 +396,49 @@ paste dNTP/dNTP.hmmscan_tiger_filter_WP.replace.tsv dNTP/dNTP.hmmscan_tiger_filt
 # 形成统计表格
 perl script/make_table.pl -t summary/strains.taxon.tsv -i dNTP/dNTP.hmmscan_tiger_filter.summary -a summary/total.lst > dNTP/hmmscan_tiger_filter.statistics.tsv
 
+
+# 去掉后两个统计一下
+cat dNTP/dNTP_tiger_minevalue.tsv | tsv-select -f 1,3 | tsv-filter --str-in-fld 2:"NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase" >dNTP/dNTP.hmmscan_tiger_filter_new.replace.tsv
+cat dNTP/dNTP.hmmscan_tiger_filter_new.replace.tsv | tsv-select -f 1 | grep -Eo '([^_]+_[^_]+)$' | sed 's/$/.1/' > dNTP/dNTP.hmmscan_tiger_filter_WP_new.replace.tsv
+paste dNTP/dNTP.hmmscan_tiger_filter_WP_new.replace.tsv dNTP/dNTP.hmmscan_tiger_filter_new.replace.tsv > dNTP/dNTP.hmmscan_tiger_filter_new.summary
+# 形成统计表格
+perl script/make_table.pl -t summary/strains.taxon.tsv -i dNTP/dNTP.hmmscan_tiger_filter_new.summary -a summary/total.lst > dNTP/hmmscan_tiger_filter_new.statistics.tsv
 ```
 
 
-# 使用blastp筛选一遍hmmsearch结果蛋白
+# 使用blastp筛选一遍hmmscan结果蛋白
+
+```bash
+cd ~/Shenwei/data/Pseudomonas_xrz
+#提取hmmsearch和hmmscan结果
+cat MltB/MltB_minevalue.tsv |  tsv-select -f 1,3 |
+tsv-filter --str-in-fld 2:"MltB:_lytic_murein_transglycosylase_B" |
+cut -f 1 >MltB/MltB_diamond1.tsv
+
+#第一轮diamond
+faops some PROTEINS/all.replace.fa  MltB/MltB_diamond1.tsv MltB/MltB_diamond1.fa
+diamond makedb --in MltB/MltB_diamond1.fa --db MltB/MltB1
+diamond blastp --db MltB/MltB1.dmnd --query PROTEINS/all.replace.fa -e 1e-10 --outfmt 6 --threads 8 --out MltB/MltB_result1.tsv
+
+#第二轮diamond
+faops some PROTEINS/all.replace.fa <(cat MltB/MltB_result1.tsv | cut -f 2 | sort -n | uniq) MltB/MltB_diamond2.fa
+diamond makedb --in MltB/MltB_diamond2.fa --db MltB/MltB2
+diamond blastp --db MltB/MltB2.dmnd --query PROTEINS/all.replace.fa -e 1e-10 --outfmt 6 --threads 8 --out MltB/MltB_result2.tsv
 
 
+#hmmer结果
+cat MltB/MltB_diamond1.tsv | wc -l  #1790
+
+#第一轮diamond的query
+cut -f 1 MltB/MltB_result1.tsv | sort -n | uniq | wc -l #3672
+#第一轮diamond的target
+cut -f 2 MltB/MltB_result1.tsv | sort -n | uniq | wc -l #1047
+
+#第二轮diamond的query
+cut -f 1 MltB/MltB_result2.tsv | sort -n | uniq | wc -l #3762
+#第二轮diamond的target
+cut -f 2 MltB/MltB_result2.tsv | sort -n | uniq | wc -l #1047
+```
 
 
 
