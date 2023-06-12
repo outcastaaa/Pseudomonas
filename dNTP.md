@@ -382,14 +382,12 @@ cat  dNTP/dNTP_tiger.abstract.tsv | tsv-summarize -g 1,6 --count
 perl script/compare.pl dNTP/dNTP_tiger.abstract.tsv >dNTP/dNTP_tiger_minevalue.tsv
 tsv-summarize -g 3 --count dNTP/dNTP_tiger_minevalue.tsv
 # NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      3763
-# NCBI_Protein_Cluster_(PRK):_dGTPase     920 这两个看情况去掉
+# NCBI_Protein_Cluster_(PRK):_dGTPase     920 
 # JCVI:_dNTP_triphosphohydrolase  43
 
-#拼接属名等信息并统计拷贝数
+#不筛选domain拼接属名等信息并统计拷贝数
 cat dNTP/dNTP_tiger_minevalue.tsv | tsv-select -f 1,3 |
 tsv-summarize -g 2 --count 
-
-
 cat dNTP/dNTP_tiger_minevalue.tsv | tsv-select -f 1,3  >dNTP/dNTP.hmmscan_tiger_filter.replace.tsv
 cat dNTP/dNTP.hmmscan_tiger_filter.replace.tsv | tsv-select -f 1 | grep -Eo '([^_]+_[^_]+)$' | sed 's/$/.1/' > dNTP/dNTP.hmmscan_tiger_filter_WP.replace.tsv
 paste dNTP/dNTP.hmmscan_tiger_filter_WP.replace.tsv dNTP/dNTP.hmmscan_tiger_filter.replace.tsv > dNTP/dNTP.hmmscan_tiger_filter.summary
@@ -397,47 +395,47 @@ paste dNTP/dNTP.hmmscan_tiger_filter_WP.replace.tsv dNTP/dNTP.hmmscan_tiger_filt
 perl script/make_table.pl -t summary/strains.taxon.tsv -i dNTP/dNTP.hmmscan_tiger_filter.summary -a summary/total.lst > dNTP/hmmscan_tiger_filter.statistics.tsv
 
 
-# 去掉后两个统计一下
-cat dNTP/dNTP_tiger_minevalue.tsv | tsv-select -f 1,3 | tsv-filter --str-in-fld 2:"NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase" >dNTP/dNTP.hmmscan_tiger_filter_new.replace.tsv
+# 去掉最后一个统计一下，因为PAO1含有前两个domain命名
+cat dNTP/dNTP_tiger_minevalue.tsv | tsv-select -f 1,3 | tsv-filter --str-not-in-fld 2:"JCVI:_dNTP_triphosphohydrolase" >dNTP/dNTP.hmmscan_tiger_filter_new.replace.tsv
 cat dNTP/dNTP.hmmscan_tiger_filter_new.replace.tsv | tsv-select -f 1 | grep -Eo '([^_]+_[^_]+)$' | sed 's/$/.1/' > dNTP/dNTP.hmmscan_tiger_filter_WP_new.replace.tsv
 paste dNTP/dNTP.hmmscan_tiger_filter_WP_new.replace.tsv dNTP/dNTP.hmmscan_tiger_filter_new.replace.tsv > dNTP/dNTP.hmmscan_tiger_filter_new.summary
 # 形成统计表格
 perl script/make_table.pl -t summary/strains.taxon.tsv -i dNTP/dNTP.hmmscan_tiger_filter_new.summary -a summary/total.lst > dNTP/hmmscan_tiger_filter_new.statistics.tsv
 ```
-
+!!! 结果和前面有些不同，有些物种两拷贝呗排除在外
 
 # 使用blastp筛选一遍hmmscan结果蛋白
-
+* 使用上面排除了最后一个domain的结果
 ```bash
 cd ~/Shenwei/data/Pseudomonas_xrz
 #提取hmmsearch和hmmscan结果
-cat MltB/MltB_minevalue.tsv |  tsv-select -f 1,3 |
-tsv-filter --str-in-fld 2:"MltB:_lytic_murein_transglycosylase_B" |
-cut -f 1 >MltB/MltB_diamond1.tsv
+cat dNTP/dNTP.hmmscan_tiger_filter_new.replace.tsv | cut -f 1 > dNTP/dNTP_diamond1.tsv
 
 #第一轮diamond
-faops some PROTEINS/all.replace.fa  MltB/MltB_diamond1.tsv MltB/MltB_diamond1.fa
-diamond makedb --in MltB/MltB_diamond1.fa --db MltB/MltB1
-diamond blastp --db MltB/MltB1.dmnd --query PROTEINS/all.replace.fa -e 1e-10 --outfmt 6 --threads 8 --out MltB/MltB_result1.tsv
+faops some PROTEINS/all.replace.fa  dNTP/dNTP_diamond1.tsv dNTP/dNTP_diamond1.fa
+diamond makedb --in dNTP/dNTP_diamond1.fa --db dNTP/dNTP
+bsub -q mpi -n 24 -J "blastp" -o dNTP/dNTP "
+diamond blastp --db dNTP/dNTP.dmnd --query PROTEINS/all.replace.fa -e 1e-10 --outfmt 6 --threads 16 --out dNTP/dNTP_blastp_result1.tsv"
 
 #第二轮diamond
-faops some PROTEINS/all.replace.fa <(cat MltB/MltB_result1.tsv | cut -f 2 | sort -n | uniq) MltB/MltB_diamond2.fa
-diamond makedb --in MltB/MltB_diamond2.fa --db MltB/MltB2
-diamond blastp --db MltB/MltB2.dmnd --query PROTEINS/all.replace.fa -e 1e-10 --outfmt 6 --threads 8 --out MltB/MltB_result2.tsv
+faops some PROTEINS/all.replace.fa <(cat dNTP/dNTP_blastp_result1.tsv | cut -f 2 | sort -n | uniq) dNTP/dNTP_diamond2.fa
+diamond makedb --in dNTP/dNTP_diamond2.fa --db dNTP/dNTP
+bsub -q mpi -n 24 -J "blastp" -o dNTP/dNTP "
+diamond blastp --db dNTP/dNTP.dmnd --query PROTEINS/all.replace.fa -e 1e-10 --outfmt 6 --threads 16 --out dNTP/dNTP_blastp_result2.tsv"
 
 
 #hmmer结果
-cat MltB/MltB_diamond1.tsv | wc -l  #1790
+cat dNTP/dNTP_diamond1.tsv | wc -l  #
 
 #第一轮diamond的query
-cut -f 1 MltB/MltB_result1.tsv | sort -n | uniq | wc -l #3672
+cut -f 1 dNTP/dNTP_blastp_result1.tsv | sort -n | uniq | wc -l #
 #第一轮diamond的target
-cut -f 2 MltB/MltB_result1.tsv | sort -n | uniq | wc -l #1047
+cut -f 2 dNTP/dNTP_blastp_result1.tsv | sort -n | uniq | wc -l #
 
 #第二轮diamond的query
-cut -f 1 MltB/MltB_result2.tsv | sort -n | uniq | wc -l #3762
+cut -f 1 dNTP/dNTP_blastp_result2.tsv | sort -n | uniq | wc -l #
 #第二轮diamond的target
-cut -f 2 MltB/MltB_result2.tsv | sort -n | uniq | wc -l #1047
+cut -f 2 dNTP/dNTP_blastp_result2.tsv | sort -n | uniq | wc -l #
 ```
 
 
