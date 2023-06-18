@@ -402,7 +402,7 @@ paste dNTP/dNTP.hmmscan_tiger_filter_WP_new.replace.tsv dNTP/dNTP.hmmscan_tiger_
 # 形成统计表格
 perl script/make_table.pl -t summary/strains.taxon.tsv -i dNTP/dNTP.hmmscan_tiger_filter_new.summary -a summary/total.lst > dNTP/hmmscan_tiger_filter_new.statistics.tsv
 ```
-!!! 结果和前面有些不同，有些物种两拷贝呗排除在外
+!!! 结果和前面有些不同，有些物种两拷贝被排除在外
 
 # 使用blastp筛选一遍hmmscan结果蛋白
 * 使用上面排除了最后一个domain的结果
@@ -458,10 +458,33 @@ diff tem1.tsv dNTP/dNTP_diamond1.tsv -y -W 100 > diff1.tsv
 diff tem2.tsv dNTP/dNTP_diamond1.tsv -y -W 100 > diff2.tsv
 diff tem1.tsv tem2.tsv -y -W 100 > diff3.tsv
 
+# 统计下新找到的target中比hmm找到的多了哪些，以及多的domain注释是什么
 cut -f 1 dNTP/dNTP_blastp_result2.tsv | sort -n | uniq > tem21.tsv
 sed -i 's/\_123$//g'  tem21.tsv
 diff dNTP/dNTP_diamond1.tsv  tem21.tsv -y -W 100 > diff1_21.tsv
 cat diff1_21.tsv  | grep '>' > 1.txt
+
+# 2.txt储存着domain注释情况
+cat 2.txt | while read id
+do
+  string="${id}"
+  part1=$(echo "$string" | cut -d' ' -f1)
+  part2=$(echo "$string" | cut -d'[' -f1 | cut -d' ' -f2-)
+  part3=$(echo "$string" | awk -F'[][]' '{print $2}')
+  echo "$part1,$part2,$part3"
+done >3.txt
+
+# 统计下domain名字
+cat 3.txt | cut -d',' -f 2 | tsv-summarize -g 1 --count
+# hypothetical protein    2
+# MULTISPECIES: dNTP triphosphohydrolase  6
+# dNTP triphosphohydrolase        38
+# deoxyguanosinetriphosphate triphosphohydrolase  10
+# MULTISPECIES: deoxyguanosinetriphosphate triphosphohydrolase    22
+# dGTPase         3
+# HD domain-containing protein    1
+# MULTISPECIES: dGTPase   3
+# HD domain-containing protein    1
 ```
 
 
@@ -470,7 +493,7 @@ cat diff1_21.tsv  | grep '>' > 1.txt
 ```bash
 E_VALUE=1e-20
 
-# 对模式物种菌株建树，10/15中找到了
+# 对模式物种菌株建树，10/15中找到了faa蛋白文件，只有三个有注释
 # make tree
 for domain in TIGR01353;do
     >&2 echo "==> domain [${domain}]"
@@ -506,7 +529,7 @@ cat dNTP/reference/dNTP.replace.tsv | tsv-select -f 2,1  > dNTP/reference/dNTP.f
 #     -f reference/PTHR30213.replace.tsv | 
 # tsv-join -f reference/TIGR00765.replace.tsv > reference/brkb.replace.tsv
 
-for i in $(sed 's/\t/-/g' dNTP/reference/TIGR01353.replace.tsv);do
+for i in $(sed 's/\t/-/g' dNTP/reference/dNTP.replace.tsv);do
     PROTEIN=$(echo $i | cut -d "-" -f 1)
     REPLACE=$(echo $i | cut -d "-" -f 2)
     SPECIES=$(echo $i | cut -d "-" -f 2 | rev | tr "_" "\t" | tsv-select --exclude 1,2 | rev | tr "\t" "_")
@@ -519,7 +542,6 @@ done \
 
 muscle -in dNTP/reference/dNTP.fa -out dNTP/reference/dNTP.aln.fa
 
-
 bsub -q serial -n 15 -J "iqtree" -o dNTP/reference/ "iqtree -s dNTP/reference/dNTP.aln.fa -m MFP -bb 1000 -alrt 1000 -nt AUTO"
 ```
 
@@ -529,137 +551,121 @@ bsub -q serial -n 15 -J "iqtree" -o dNTP/reference/ "iqtree -s dNTP/reference/dN
 
 ```bash
 # 将提取的dNTP蛋白序列与pfam数据库比对
-faops some PROTEINS/all.replace.fa <(tsv-select -f 1 dNTP/reference/TIGR01353.replace.tsv)  dNTP/reference/dNTP.pfam.fa
+faops some PROTEINS/all.replace.fa <(tsv-select -f 2 dNTP/reference/dNTP.replace.tsv)  dNTP/reference/dNTP.pfam.fa
 
 E_value=1e-10
 NAME=dNTP/reference
-bsub -q mpi -n 24 -J "hmmscan" -o dNTP/reference " hmmscan --cpu 12 -E 1e-10 --domE 1e-10 --noali --tblout ${NAME}/dNTP.pfam.tbl  HMM/PFAM/Pfam-A.hmm  dNTP/reference/dNTP.pfam.fa"
+bsub -q mpi -n 24 -J "hmmscan" -o ${NAME} " hmmscan --cpu 12 -E 1e-10 --domE 1e-10 --noali --tblout ${NAME}/dNTP.pfam.tbl  HMM/PFAM/Pfam-A.hmm  ${NAME}/dNTP.pfam.fa"
 
-cp ~/shiyuqi/pseudomonas/abstract.pl ~/Shenwei/data/Pseudomonas_xrz/script/
-perl script/abstract.pl dNTP/dNTP.tbl > dNTP/dNTP.abstract.tsv
+perl script/abstract.pl dNTP/reference/dNTP.pfam.tbl > dNTP/reference/dNTP.abstract.tsv
 # 提取其中关键信息：target name，accession，query name，full sequence E-value，best 1 domain E-value，description of target
-
-#查看dNTP同家族蛋白的数据库登录号以及结构域描述
-cat  dNTP/dNTP.abstract.tsv | tsv-summarize -g 2,6  --count
-# PF13286.6       Phosphohydrolase-associated_domain      1756
-# PF01966.22      HD_domain       1564
-# PF10237.9       Probable_N6-adenine_methyltransferase   1
-
-#查看domain以及domain的描述
-cat  dNTP/dNTP.abstract.tsv | tsv-summarize -g 1,6 --count
-# HD_assoc        Phosphohydrolase-associated_domain      1756
-# HD      HD_domain       1564
-# N6-adenineMlase Probable_N6-adenine_methyltransferase   1
-
-#同一蛋白序列可以匹配到多条model序列,只保留e值最小的且description符合该famliy的菌株蛋白序列名
-cp ~/shiyuqi/pseudomonas/compare.pl ~/Shenwei/data/Pseudomonas_xrz/script/
-perl script/compare.pl dNTP/dNTP.abstract.tsv >dNTP/dNTP_minevalue.tsv
-tsv-summarize -g 3 --count dNTP/dNTP_minevalue.tsv
-# Phosphohydrolase-associated_domain      1756
-# HD_domain       18 要保留！要不然铜绿没有了
-
-
-#拼接属名等信息并统计拷贝数
-cat dNTP/dNTP_minevalue.tsv | tsv-select -f 1,3 |
-tsv-summarize -g 2 --count 
-# Phosphohydrolase-associated_domain      1756
-# HD_domain       18
-
-cat dNTP/dNTP_minevalue.tsv | tsv-select -f 1,3  >dNTP/dNTP.hmmscan_filter.replace.tsv
-cat dNTP/dNTP.hmmscan_filter.replace.tsv | tsv-select -f 1 | grep -Eo '([^_]+_[^_]+)$' | sed 's/$/.1/' > dNTP/dNTP.hmmscan_filter_WP.replace.tsv
-paste dNTP/dNTP.hmmscan_filter_WP.replace.tsv dNTP/dNTP.hmmscan_filter.replace.tsv > dNTP/dNTP.hmmscan_filter.summary
-# 形成统计表格
-perl script/make_table.pl -t summary/strains.taxon.tsv -i dNTP/dNTP.hmmscan_filter.summary -a summary/total.lst > dNTP/hmmscan_filter.statistics.tsv
-
-
-
-
-# 因为筛选出来的太少，使用dNTP/dNTP.abstract.tsv代替dNTP/dNTP_minevalue.tsv重新处理一遍
-#拼接属名等信息并统计拷贝数
-cat dNTP/dNTP.abstract.tsv | tsv-select -f 3,6 | tsv-summarize -g 2 --count 
-# Phosphohydrolase-associated_domain      1756
-# HD_domain       1564
-# Probable_N6-adenine_methyltransferase   1
-
-cat dNTP/dNTP.abstract.tsv | tsv-select -f 3,6 | tsv-filter --str-not-in-fld 2:"Probable_N6-adenine_methyltransferase" >dNTP/dNTP.hmmscan_filter.replace2.tsv
-cat dNTP/dNTP.hmmscan_filter.replace2.tsv | tsv-select -f 1 | grep -Eo '([^_]+_[^_]+)$' | sed 's/$/.1/' > dNTP/dNTP.hmmscan_filter_WP.replace2.tsv
-paste dNTP/dNTP.hmmscan_filter_WP.replace2.tsv dNTP/dNTP.hmmscan_filter.replace2.tsv > dNTP/dNTP.hmmscan_filter2.summary
-
-
-perl script/make_table.pl -t summary/strains.taxon.tsv -i dNTP/dNTP.hmmscan_filter2.summary -a summary/total.lst > dNTP/hmmscan_filter.statistics2.tsv
-
-cat dNTP/hmmscan_filter.statistics2.tsv | awk '{sum += $4} END {print sum}'
-# 3318
+# 找不到数据
 ```
 
-## 2. 使用tigrfams数据库，该蛋白只有TIGER中找到了蛋白数据，有可能只能在TIGER下查找
+2. 使用tigrfams数据库，该蛋白只有TIGER中找到了蛋白数据，有可能只能在TIGER下查找
 ```bash
-#下载tigerfam数据库
-mkdir -p ~/data/HMM/TIGERFAM
-cd ~/data/HMM/TIGERFAM
-wget -N --content-disposition https://ftp.ncbi.nlm.nih.gov/hmm/current/hmm_PGAP.HMM.tgz
-tar -xzvf hmm_PGAP.HMM.tgz
-cat *.HMM >tigrfams.hmm
-ln -s ~/shiyuqi/pseudomonas/TIGERFAM ~/Shenwei/data/Pseudomonas_xrz/HMM/
-
-#格式化tigerfam数据库 
-bsub -q mpi -n 24 -J "hmm" "hmmpress ~/Shenwei/data/Pseudomonas_xrz/HMM/TIGERFAM/tigerfam.hmm"
-
-
 # 将提取的dNTP蛋白序列与数据库比对
-cd ~/Shenwei/data/Pseudomonas_xrz/PROTEINS
-gzip -dc all.replace.fa.gz > all.replace.fa
-cd ~/Shenwei/data/Pseudomonas_xrz/
-faops some PROTEINS/all.replace.fa <(tsv-select -f 1 dNTP/dNTP.filter.replace.tsv)  dNTP/dNTP.tiger.fa
+faops some PROTEINS/all.replace.fa <(tsv-select -f 2 dNTP/reference/dNTP.replace.tsv)  dNTP/reference/dNTP.tiger.fa
+cp dNTP/reference/dNTP.pfam.fa dNTP/reference/dNTP.tiger.fa
 
 E_value=1e-40
-NAME=dNTP
-bsub -q mpi -n 24 -J "hmmscan" -o dNTP/ " hmmscan --cpu 12 -E 1e-40 --domE 1e-40 --noali --tblout ${NAME}/${NAME}.tiger.tbl  HMM/TIGERFAM/tigerfam.hmm  ${NAME}/${NAME}.tiger.fa"
+NAME=dNTP/reference
+bsub -q mpi -n 24 -J "hmmscan" -o ${NAME} " hmmscan --cpu 12 -E 1e-40 --domE 1e-40 --noali --tblout ${NAME}/dNTP.tiger.tbl  HMM/TIGERFAM/tigerfam.hmm  ${NAME}/dNTP.tiger.fa"
 
-perl script/abstract.pl dNTP/dNTP.tiger.tbl > dNTP/dNTP_tiger.abstract.tsv
+perl script/abstract.pl dNTP/reference/dNTP.tiger.tbl > dNTP/reference/dNTP_tiger.abstract.tsv
 # 提取其中关键信息：target name，accession，query name，full sequence E-value，best 1 domain E-value，description of target
 
 #查看dNTP同家族蛋白的数据库登录号以及结构域描述
-cat  dNTP/dNTP_tiger.abstract.tsv | tsv-summarize -g 2,6  --count
-# NF002205.0      NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      3222
-# TIGR01353.1     JCVI:_dNTP_triphosphohydrolase  4726
-# NF003429.0      NCBI_Protein_Cluster_(PRK):_dGTPase     3218
-# NF003701.0      NCBI_Protein_Cluster_(PRK):_dGTPase     4704
-# NF002829.0      NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      3826
-# NF002326.0      NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      1567
-# NF002328.0      NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      1567
-# NF002327.0      NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      1567
-# NF002330.0      NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      1567
-# NF002329.0      NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      1508
+cat  dNTP/reference/dNTP_tiger.abstract.tsv | tsv-summarize -g 2,6  --count
+# NF002205.0      NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      3
+# TIGR01353.1     JCVI:_dNTP_triphosphohydrolase  3
+# NF003429.0      NCBI_Protein_Cluster_(PRK):_dGTPase     3
+# NF003701.0      NCBI_Protein_Cluster_(PRK):_dGTPase     3
+# NF002829.0      NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      2
 
 #查看domain以及domain的描述
-cat  dNTP/dNTP_tiger.abstract.tsv | tsv-summarize -g 1,6 --count
+cat  dNTP/reference/dNTP_tiger.abstract.tsv | tsv-summarize -g 1,6 --count
 
 
 #同一蛋白序列可以匹配到多条model序列,只保留e值最小的且description符合该famliy的菌株蛋白序列名
-perl script/compare.pl dNTP/dNTP_tiger.abstract.tsv >dNTP/dNTP_tiger_minevalue.tsv
-tsv-summarize -g 3 --count dNTP/dNTP_tiger_minevalue.tsv
-# NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      3763
-# NCBI_Protein_Cluster_(PRK):_dGTPase     920 
-# JCVI:_dNTP_triphosphohydrolase  43
+perl script/compare.pl dNTP/reference/dNTP_tiger.abstract.tsv > dNTP/reference/dNTP_tiger_minevalue.tsv
+tsv-summarize -g 3 --count dNTP/reference/dNTP_tiger_minevalue.tsv
+# NCBI_Protein_Cluster_(PRK):_deoxyguanosinetriphosphate_triphosphohydrolase      2
+# NCBI_Protein_Cluster_(PRK):_dGTPase     1
 
 #不筛选domain拼接属名等信息并统计拷贝数
-cat dNTP/dNTP_tiger_minevalue.tsv | tsv-select -f 1,3 |
-tsv-summarize -g 2 --count 
-cat dNTP/dNTP_tiger_minevalue.tsv | tsv-select -f 1,3  >dNTP/dNTP.hmmscan_tiger_filter.replace.tsv
-cat dNTP/dNTP.hmmscan_tiger_filter.replace.tsv | tsv-select -f 1 | grep -Eo '([^_]+_[^_]+)$' | sed 's/$/.1/' > dNTP/dNTP.hmmscan_tiger_filter_WP.replace.tsv
-paste dNTP/dNTP.hmmscan_tiger_filter_WP.replace.tsv dNTP/dNTP.hmmscan_tiger_filter.replace.tsv > dNTP/dNTP.hmmscan_tiger_filter.summary
+cat dNTP/reference/dNTP_tiger_minevalue.tsv | tsv-select -f 1,3  > dNTP/reference/dNTP.hmmscan_tiger_filter.replace.tsv
+cat dNTP/reference/dNTP.hmmscan_tiger_filter.replace.tsv | tsv-select -f 1 | grep -Eo '([^_]+_[^_]+)$' | sed 's/$/.1/' > dNTP/reference/dNTP.hmmscan_tiger_filter_WP.replace.tsv
+paste dNTP/reference/dNTP.hmmscan_tiger_filter_WP.replace.tsv dNTP/reference/dNTP.hmmscan_tiger_filter.replace.tsv > dNTP/reference/dNTP.hmmscan_tiger_filter.summary
 # 形成统计表格
-perl script/make_table.pl -t summary/strains.taxon.tsv -i dNTP/dNTP.hmmscan_tiger_filter.summary -a summary/total.lst > dNTP/hmmscan_tiger_filter.statistics.tsv
-
-
-# 去掉最后一个统计一下，因为PAO1含有前两个domain命名
-cat dNTP/dNTP_tiger_minevalue.tsv | tsv-select -f 1,3 | tsv-filter --str-not-in-fld 2:"JCVI:_dNTP_triphosphohydrolase" >dNTP/dNTP.hmmscan_tiger_filter_new.replace.tsv
-cat dNTP/dNTP.hmmscan_tiger_filter_new.replace.tsv | tsv-select -f 1 | grep -Eo '([^_]+_[^_]+)$' | sed 's/$/.1/' > dNTP/dNTP.hmmscan_tiger_filter_WP_new.replace.tsv
-paste dNTP/dNTP.hmmscan_tiger_filter_WP_new.replace.tsv dNTP/dNTP.hmmscan_tiger_filter_new.replace.tsv > dNTP/dNTP.hmmscan_tiger_filter_new.summary
-# 形成统计表格
-perl script/make_table.pl -t summary/strains.taxon.tsv -i dNTP/dNTP.hmmscan_tiger_filter_new.summary -a summary/total.lst > dNTP/hmmscan_tiger_filter_new.statistics.tsv
+perl script/make_table.pl -t summary/strains.taxon.tsv -i dNTP/reference/dNTP.hmmscan_tiger_filter.summary -a summary/total.lst > dNTP/reference/hmmscan_tiger_filter.statistics.tsv
+# Taxonomy        Number of assemblies    Number of maiA  Average per genome
+# Acinetobacter pittii    98      1       0.0
+# Pseudomonas aeruginosa  648     2       0.0
 ```
+
+* blastp
+```bash
+#提取hmmsearch和hmmscan结果
+cat dNTP/reference/dNTP.hmmscan_tiger_filter.replace.tsv | cut -f 1 > dNTP/reference/dNTP_diamond1.tsv
+
+#第一轮diamond
+faops some PROTEINS/all.replace.fa  dNTP/reference/dNTP_diamond1.tsv dNTP/reference/dNTP_diamond1.fa
+
+diamond makedb --in dNTP/reference/dNTP_diamond1.fa --db dNTP/reference/dNTP1
+bsub -q mpi -n 24 -J "blastp" -o dNTP/reference/ "
+diamond blastp --db dNTP/reference/dNTP1.dmnd --query PROTEINS/all.replace.fa -e 1e-20 --outfmt 6 --threads 16 --out dNTP/reference/dNTP_blastp_result1.tsv"
+
+#第二轮diamond
+faops some PROTEINS/all.replace.fa <(cat dNTP/reference/dNTP_blastp_result1.tsv | cut -f 1 | sort -n | uniq ) dNTP/reference/dNTP_diamond2.fa
+diamond makedb --in dNTP/reference/dNTP_diamond2.fa --db dNTP/reference/dNTP2
+bsub -q mpi -n 24 -J "blastp" -o dNTP/reference/ "
+diamond blastp --db dNTP/reference/dNTP2.dmnd --query PROTEINS/all.replace.fa -e 1e-20 --outfmt 6 --threads 16 --out dNTP/reference/dNTP_blastp_result2.tsv"
+
+# 第三轮
+faops some PROTEINS/all.replace.fa <(cat dNTP/reference/dNTP_blastp_result2.tsv | cut -f 1 | sort -n | uniq ) dNTP/reference/dNTP_diamond3.fa
+diamond makedb --in dNTP/reference/dNTP_diamond3.fa --db dNTP/reference/dNTP3
+bsub -q mpi -n 24 -J "blastp" -o dNTP/reference/ "
+diamond blastp --db dNTP/reference/dNTP3.dmnd --query PROTEINS/all.replace.fa -e 1e-20 --outfmt 6 --threads 16 --out dNTP/reference/dNTP_blastp_result3.tsv"
+
+
+# 第四轮
+faops some PROTEINS/all.replace.fa <(cat dNTP/reference/dNTP_blastp_result3.tsv | cut -f 1 | sort -n | uniq ) dNTP/reference/dNTP_diamond4.fa
+diamond makedb --in dNTP/reference/dNTP_diamond4.fa --db dNTP/reference/dNTP4
+bsub -q mpi -n 24 -J "blastp" -o dNTP/reference/ "
+diamond blastp --db dNTP/reference/dNTP4.dmnd --query PROTEINS/all.replace.fa -e 1e-20 --outfmt 6 --threads 16 --out dNTP/reference/dNTP_blastp_result4.tsv"
+
+
+#hmmer结果
+cat dNTP/reference/dNTP_diamond1.tsv | wc -l  #3
+
+#第一轮diamond的query,unknown
+cut -f 1 dNTP/reference/dNTP_blastp_result1.tsv | sort -n | uniq | wc -l #4715
+#第一轮diamond的subject,reference
+cut -f 2 dNTP/reference/dNTP_blastp_result1.tsv | sort -n | uniq | wc -l #3
+
+#第二轮diamond的query
+cut -f 1 dNTP/reference/dNTP_blastp_result2.tsv | sort -n | uniq | wc -l #4730
+#第二轮diamond的subject
+cut -f 2 dNTP/reference/dNTP_blastp_result2.tsv | sort -n | uniq | wc -l #2264
+
+#第三轮diamond的query
+cut -f 1 dNTP/reference/dNTP_blastp_result3.tsv | sort -n | uniq | wc -l #4730
+#第三轮diamond的subject
+cut -f 2 dNTP/reference/dNTP_blastp_result3.tsv | sort -n | uniq | wc -l #2279
+# 第四轮
+cut -f 1 dNTP/reference/dNTP_blastp_result4.tsv | sort -n | uniq | wc -l #4730
+cut -f 2 dNTP/reference/dNTP_blastp_result4.tsv | sort -n | uniq | wc -l #2279
+
+
+
+# 看一下与总物种是否一样
+cut -f 1 dNTP/reference/dNTP_blastp_result4.tsv | sort -n | uniq > 1.temp
+cut -f 1 dNTP/dNTP_blastp_result2.tsv | sort -n | uniq > 2.temp
+
+diff 1.temp 2.temp -y -W 100 | grep '>'
+```
+
 
 
 
