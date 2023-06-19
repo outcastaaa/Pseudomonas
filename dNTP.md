@@ -433,6 +433,16 @@ bsub -q mpi -n 24 -J "blastp" -o dNTP/ "
 diamond blastp --db dNTP/dNTP2.dmnd --query PROTEINS/all.replace.fa -e 1e-20 --outfmt 6 --threads 16 --out dNTP/dNTP_blastp_result2.tsv"
 
 
+# 统计拷贝表格
+cat dNTP/dNTP_blastp_result2.tsv | tsv-select -f 1 | uniq >dNTP/dNTP_blastp_result2_list1.tsv
+cat dNTP/dNTP_blastp_result2_list1.tsv | tsv-select -f 1 | grep -Eo '([^_]+_[^_]+)$' | sed 's/$/.1/' > dNTP/dNTP_blastp_result2_WP.replace.tsv
+paste dNTP/dNTP_blastp_result2_WP.replace.tsv dNTP/dNTP_blastp_result2_list1.tsv  > dNTP/dNTP_blastp_result2.summary
+# 形成统计表格
+perl script/make_table.pl -t summary/strains.taxon.tsv -i dNTP/dNTP_blastp_result2.summary -a summary/total.lst > dNTP/blastp.statistics.tsv
+
+
+
+
 #hmmer结果
 cat dNTP/dNTP_diamond1.tsv | wc -l  #4683
 
@@ -605,6 +615,7 @@ perl script/make_table.pl -t summary/strains.taxon.tsv -i dNTP/reference/dNTP.hm
 ```
 
 * blastp
+* 使用全部物种
 ```bash
 #提取hmmsearch和hmmscan结果
 cat dNTP/reference/dNTP.hmmscan_tiger_filter.replace.tsv | cut -f 1 > dNTP/reference/dNTP_diamond1.tsv
@@ -665,7 +676,36 @@ cut -f 1 dNTP/dNTP_blastp_result2.tsv | sort -n | uniq > 2.temp
 
 diff 1.temp 2.temp -y -W 100 | grep '>'
 ```
+* 只使用10/15个模式物种
+```bash
+# 提取qurry序列
+cat summary/reference.lst | while read id;do
+  echo $id
+  cat PROTEINS/all.replace.fa | grep "$id" > dNTP/reference/temp.list
+  faops some PROTEINS/all.replace.fa <(cat dNTP/reference/temp.list)  dNTP/reference/dNTP.${id}.reference.fa
+done 
+cat dNTP/reference/dNTP.*.reference.fa > dNTP/reference/dNTP.reference.fa
 
+
+
+#提取hmmsearch和hmmscan结果
+cat dNTP/reference/dNTP.hmmscan_tiger_filter.replace.tsv | cut -f 1 > dNTP/reference/dNTP_diamond1.tsv
+
+#第一轮diamond
+faops some PROTEINS/all.replace.fa  dNTP/reference/dNTP_diamond1.tsv dNTP/reference/dNTP_diamond1.fa
+
+diamond makedb --in dNTP/reference/dNTP_diamond1.fa --db dNTP/reference/dNTP1
+bsub -q mpi -n 24 -J "blastp" -o dNTP/reference/ "
+diamond blastp --db dNTP/reference/dNTP1.dmnd --query PROTEINS/all.replace.fa -e 1e-20 --outfmt 6 --threads 16 --out dNTP/reference/dNTP_blastp_result1.tsv"
+
+#第二轮diamond
+faops some PROTEINS/all.replace.fa <(cat dNTP/reference/dNTP_blastp_result1.tsv | cut -f 1 | sort -n | uniq ) dNTP/reference/dNTP_diamond2.fa
+diamond makedb --in dNTP/reference/dNTP_diamond2.fa --db dNTP/reference/dNTP2
+bsub -q mpi -n 24 -J "blastp" -o dNTP/reference/ "
+diamond blastp --db dNTP/reference/dNTP2.dmnd --query PROTEINS/all.replace.fa -e 1e-20 --outfmt 6 --threads 16 --out dNTP/reference/dNTP_blastp_result2.tsv"
+
+
+```
 
 
 
