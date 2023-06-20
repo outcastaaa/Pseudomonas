@@ -676,13 +676,15 @@ cut -f 1 dNTP/dNTP_blastp_result2.tsv | sort -n | uniq > 2.temp
 
 diff 1.temp 2.temp -y -W 100 | grep '>'
 ```
+
+
 * 只使用10/15个模式物种
 ```bash
 # 提取qurry序列
 cat summary/reference.lst | while read id;do
   echo $id
   cat PROTEINS/all.replace.fa | grep "$id" > dNTP/reference/temp.list
-  faops some PROTEINS/all.replace.fa <(cat dNTP/reference/temp.list)  dNTP/reference/dNTP.${id}.reference.fa
+  faops some PROTEINS/all.replace.fa <(cat dNTP/reference/temp.list | sed 's/^>//g')  dNTP/reference/dNTP.${id}.reference.fa
 done 
 cat dNTP/reference/dNTP.*.reference.fa > dNTP/reference/dNTP.reference.fa
 
